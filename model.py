@@ -147,6 +147,7 @@ class Model(object):
                         pre, loss, _ = sess.run([self.prediction, self.loss, train_op], feed_dict={self._input: x, self._target: y})
                         print(pre)
                         print(y)
+                        print(sess.run(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=pre, labels=y))))
                         print(loss)
                         if counter % batch_nums == 0:
                             print("Epoch %d loss: %lf" % ((counter // batch_nums), loss))
@@ -155,4 +156,3 @@ class Model(object):
                             print("Test accurcy:", accurcy)
                     except tf.errors.OutOfRangeError:
                         break
-
