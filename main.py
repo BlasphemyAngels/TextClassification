@@ -25,8 +25,9 @@ if __name__ == '__main__':
     parser.add_argument("--k_fold", type=int, default=8, help="the k of KFold")
     parser.add_argument("--vocab_size", type=int, default=8000, help="the size of the vocabulary")
     parser.add_argument("--model", type=str, required=True, help="model name")
-    parser.add_argument("--batch_size", type=int, default=200, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=1024, help="batch size")
     parser.add_argument("--embedding_size", type=int, default=200, help="embedding size")
+    parser.add_argument("--epoch", type=int, default=200, help="epoch")
 
     args, _ = parser.parse_known_args()
 
@@ -61,7 +62,7 @@ if __name__ == '__main__':
 
     model_dir_basename = "model-0"
 
-    model = Model(args.model, max_length, args.vocab_size, args.embedding_size, [2, 3, 5], [2, 2, 2], 0.6, 0.5, batch_size=args.batch_size)
+    model = Model(args.model, max_length, args.vocab_size, args.embedding_size, [2, 3, 5], [20, 20, 20], 0.3, 0.5, batch_size=args.batch_size, epoch=args.epoch)
 
     counter = 1
     for train_index, test_index in kf.split(tokenized_texts):

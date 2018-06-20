@@ -9,7 +9,7 @@ from utils import labels_smooth
 
 class Model(object):
     """
-        Text CNN for text classification.
+        Text classification.
     """
     def __init__(self, model_name, text_length, vocab_size, embedding_size, filters_size, filters_num, 
                  l2_reg_lambda, dropout_prob, class_nums=2, init_learning_rate=0.001, learning_rate_decay=0.9,
@@ -34,6 +34,7 @@ class Model(object):
         self._graph = tf.Graph()
         self._model_name = model_name
         self._label_smooth_eps = label_smooth_eps
+        self._mode = "train"
 
         with self._graph.as_default():
             self._input = tf.placeholder(tf.int32, [None, self._text_length], name="input")
@@ -72,26 +73,27 @@ class Model(object):
             num_of_filters = sum(self._filters_num)
             out = tf.reshape(out, [-1, num_of_filters], name="reshape")
 
-            dropout_out = tf.nn.dropout(out, keep_prob=self._dropout_prob, name="dropout")
+            #  if self._mode == "train":
+                #  dropout_out = tf.nn.dropout(out, keep_prob=self._dropout_prob, name="dropout")
 
-            final_out = tf.layers.dense(dropout_out, self._class_nums, use_bias=True,
+            final_out = tf.layers.dense(out, self._class_nums, use_bias=True,
                                         kernel_initializer=tf.contrib.layers.xavier_initializer(),
                                         bias_initializer=tf.constant_initializer(0.1),
-                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=self._l2_reg_lambda),
-                                        bias_regularizer=tf.contrib.layers.l2_regularizer(scale=self._l2_reg_lambda),
+                                        #  kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=self._l2_reg_lambda),
+                                        #  bias_regularizer=tf.contrib.layers.l2_regularizer(scale=self._l2_reg_lambda),
                                         name="fc")
         return final_out
     @define_scope
     def bilstm(self):
         pass
 
-    @define_scope
-    def lstm(self):
-
-        lstm_cell = tf.contrib.rnn.BasicLSTMCell(
-            num_units=self._lstm_config.num_lstm_units, state_is_tuple=True)
-        if self._mode == "train":
-            lstm_cell = 
+    #  @define_scope
+    #  def lstm(self):
+#
+        #  lstm_cell = tf.contrib.rnn.BasicLSTMCell(
+            #  num_units=self._lstm_config.num_lstm_units, state_is_tuple=True)
+        #  if self._mode == "train":
+            #  lstm_cell =
 
     @define_scope
     def prediction(self):
@@ -102,7 +104,7 @@ class Model(object):
         with self._graph.as_default():
             loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.prediction, labels=self._target, name="loss")
             loss = tf.reduce_mean(loss, name="reduce_mean")
-            loss += tf.losses.get_regularization_loss()
+            #  loss += tf.losses.get_regularization_loss()
         return loss
 
     @define_scope
@@ -117,6 +119,8 @@ class Model(object):
 
     def train(self, text_train, label_train, text_test, label_test, model_dir):
 
+        label_test = np.reshape(label_test, [-1, 1])
+        label_test = labels_smooth(label_test, self._class_nums, self._label_smooth_eps)
         with self._graph.as_default():
             dataset = tf.data.Dataset.from_tensor_slices((text_train, label_train))
             batch_dataset = dataset.batch(batch_size=self._batch_size)
@@ -136,16 +140,19 @@ class Model(object):
                 while True:
                     try:
                         counter += 1
+                        self._mode = "train"
                         x, y = sess.run([next_batch_text, next_batch_label])
                         y = np.reshape(y, [-1, 1]).astype(np.int32)
                         y = labels_smooth(y, self._class_nums, self._label_smooth_eps)
-                        loss, _ = sess.run([self.loss, train_op], feed_dict={self._input: x, self._target: y})
+                        pre, loss, _ = sess.run([self.prediction, self.loss, train_op], feed_dict={self._input: x, self._target: y})
+                        print(pre)
+                        print(y)
+                        print(loss)
                         if counter % batch_nums == 0:
                             print("Epoch %d loss: %lf" % ((counter // batch_nums), loss))
+                            self._mode = "test"
+                            accurcy = sess.run(self.accurcy, feed_dict={self._input: text_test, self._target: label_test})
+                            print("Test accurcy:", accurcy)
                     except tf.errors.OutOfRangeError:
                         break
 
-                label_test = np.reshape(label_test, [-1, 1])
-                label_test = labels_smooth(label_test, self._class_nums, self._label_smooth_eps)
-                accurcy = sess.run(self.accurcy, feed_dict={self._input: text_test, self._target: label_test})
-                print("Test accurcy:", accurcy)
