@@ -1,2 +1,5 @@
 __pycache__
 *.pyc
+fastText
+LSTM-CNN_CLASSIFICATION
+RNN_Text_Classify

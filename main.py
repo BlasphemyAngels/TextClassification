@@ -5,13 +5,18 @@ import re
 import logging
 import argparse
 import tensorflow as tf
-from sklearn.model_selection import KFold
+from sklearn.model_selection import train_test_split
 import numpy as np
 
 from utils import read
 from utils import tokenize_and_padding
-
-from model import Model
+from utils import labels_smooth
+from utils import parser_config
+from utils import Config
+from utils import f1
+from utils import precision
+from utils import merge_two_dicts
+from utils import recall
 
 if __name__ == '__main__':
 
@@ -21,23 +26,50 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--data_path", type=str, required=True, help="path of data")
-    parser.add_argument("--checkpoints", type=str, default="checkpoints", help="checkpoings directory")
-    parser.add_argument("--k_fold", type=int, default=8, help="the k of KFold")
-    parser.add_argument("--vocab_size", type=int, default=8000, help="the size of the vocabulary")
     parser.add_argument("--model", type=str, required=True, help="model name")
-    parser.add_argument("--batch_size", type=int, default=1024, help="batch size")
-    parser.add_argument("--embedding_size", type=int, default=200, help="embedding size")
-    parser.add_argument("--epoch", type=int, default=200, help="epoch")
+    parser.add_argument("--config_filename", type=str, default="config", help="the filename of config file")
 
     args, _ = parser.parse_known_args()
 
+    # get config
 
-    # read data
+    model_config_name = args.model
+
+    if "lstm" in args.model:
+        model_config_name = "lstm"
+    main_config = parser_config(args.config_filename, "main")
+    model_config = parser_config(args.config_filename, model_config_name)
+
+    #  configs = {**main_config, **model_config}
+    configs = merge_two_dicts(main_config, model_config)
+    configs = Config(configs)
+
+
     texts, labels = read(args.data_path)
 
+    with open("./tmp_test_content", "r") as f:
+        pred = f.readlines()
+        pred = list(map(lambda x: x.rstrip("\n"), pred))
+
+    #  vocab = {}
+#
+    #  for tt in texts + pred:
+        #  for ttt in tt.split():
+            #  if(ttt not in vocab):
+                #  vocab[ttt] = 1
+            #  else:
+                #  vocab[ttt] += 1
+    #  print(len(vocab))
+
     # tokenize
-    max_length = max(list(map(lambda text: len(text.split()), texts)))
-    tokenized_texts = tokenize_and_padding(texts, max_length, args.vocab_size)
+
+    #  max_length1 = max(list(map(lambda text: len(text.split()), texts)))
+    #  max_length2 = max(list(map(lambda x: len(x.split()), pred)))
+    #  max_length = max(max_length1, max_length2)
+
+    tokenized_texts = tokenize_and_padding(texts + pred, int(configs.length), int(configs.vocab_size))
+    tokenized_pred = tokenized_texts[len(texts):]
+    tokenized_texts = tokenized_texts[:len(texts)]
     labels = labels
 
     print("source data size:", len(tokenized_texts))
@@ -55,25 +87,76 @@ if __name__ == '__main__':
     tokenized_texts = np.array(tokenized_texts)
     labels = np.array(labels)
 
-    kf = KFold(n_splits=args.k_fold)
+    tokenized_pred = np.array(tokenized_pred)
 
-    if not os.path.exists(args.checkpoints):
-        os.mkdir(args.checkpoints)
+    labels = labels_smooth(labels, int(configs.class_nums), float(configs.label_smooth_eps))
 
-    model_dir_basename = "model-0"
+    models = __import__("models")
+    if not hasattr(models, args.model):
+        logging.error("The model %s not exist" % args.model)
+        sys.exit(1)
+    model_fn = getattr(models, args.model)
 
-    model = Model(args.model, max_length, args.vocab_size, args.embedding_size, [2, 3, 5], [20, 20, 20], 0.3, 0.5, batch_size=args.batch_size, epoch=args.epoch)
+    model = model_fn(configs)
 
-    counter = 1
-    for train_index, test_index in kf.split(tokenized_texts):
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[precision, recall, f1])
 
-        print("Train:", train_index, "Test:", test_index)
+    print('Train...')
 
-        model_dir = model_dir_basename + str(counter)
+    x_train, x_test, y_train, y_test = train_test_split(tokenized_texts, labels, test_size=0.2, random_state=0)
 
-        counter += 1
+    x_train = tokenized_texts
+    y_train = labels
 
-        text_train, text_test = tokenized_texts[train_index], tokenized_texts[test_index]
-        label_train, label_test = labels[train_index], labels[test_index]
+    model.fit(x_train, y_train, batch_size=int(configs.batch_size), epochs=int(configs.epochs), validation_data=(x_test, y_test))
 
-        model.train(text_train, label_train, text_test, label_test, model_dir)
+    score, prec, rec, fs = model.evaluate(x_test, y_test, batch_size=int(configs.batch_size))
+
+    pred = model.predict(tokenized_pred)
+
+    #  pred = np.argmax(pred, axis=1)
+#
+    #  pred = list(pred)
+
+    bad_list = [29, 35, 46, 53, 61, 93, 177, 189, 210, 227, 288]
+
+    #  print("pred", pred)
+
+    print('Test precision:', prec)
+    print('Test recall:', rec)
+    print('Test f1 score:', fs)
+
+    #  with open("./tmp_test_content.txt", "r") as f:
+        #  pred_data = f.readlines()
+        #  pred_data = list(map(lambda x: x.rstrip("\n"), pred_data))
+        #  for id_, _ in enumerate(pred):
+            #  if _ == 1:
+                #  print(pred_data[id_])
+    res = []
+    with open("./tmp_test_content.txt", "r") as f:
+        pred_data = f.readlines()
+        pred_data = list(map(lambda x: x.rstrip("\n"), pred_data))
+        for _ in bad_list:
+            print(pred_data[_ - 1].decode("utf-8"))
+            print(pred[_ - 1])
+            if(pred[_ - 1][0] > pred[_ - 1][1]):
+                res.append(0)
+            else:
+                res.append(1)
+
+    true_pred = sum(res)
+
+    val_recall = true_pred * 1.0 / len(res)
+
+    pred_class = np.argmax(pred, axis=1)
+
+    pred_pos = sum(pred_class)
+
+    val_precision = 1.0 * true_pred / (pred_pos + 0.0001)
+
+    print("val recall:", val_recall)
+    print("val precision:", val_precision)
+
+    for i, p in enumerate(pred):
+        if p < 0.99:
+            print(pred_data[i])

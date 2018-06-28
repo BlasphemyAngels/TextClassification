@@ -1,20 +1,28 @@
 import re
-import fasttext
+from fastText import FastText
 
-classifier = fasttext.load_model("./fasttext_model.bin")
+classifier = FastText.load_model("./fastText")
 
-with open("./cut_random100", "r") as f:
+with open("./tmp_test_content", "r") as f:
     lines = f.readlines()
     lines = list(map(lambda x: x.rstrip("\n"), lines))
 
-labels = classifier.predict_proba(lines)
-labels = list(map(lambda x: re.sub("__label__", "", x[0][0]) + " " + str(x[0][1]), labels))
+labels, probs = classifier.predict(lines)
 
-res = list(zip(lines, labels))
-res = list(map(lambda x: " ".join(x), res))
+labels = list(map(lambda x: re.sub("__label__", "", x[0]), labels))
+print(labels)
+
+
+probs = list(map(lambda x: str(x[0]), list(probs)))
+
+res = list(zip(labels, probs))
+
+res = list(map(lambda x: "\t".join(x), res))
+
+res = list(zip(lines, res))
+res = list(map(lambda x: "\t ".join(x), res))
 
 res = "\n".join(res)
 
-with open("res", "w") as f:
+with open("res3", "w") as f:
     f.write(res)
-

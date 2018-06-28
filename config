@@ -1,1 +1,17 @@
+[main]
+length=1039
+vocab_size=60752
+embedding_size=128
+batch_size=1024
+epochs=8
+label_smooth_eps=0.1
+class_nums=2
+l2_reg_scala=0.01
+dropout_prob=0.5
+[lstm]
+lstm_units=128
+[mlp]
+units=512
 [textcnn]
+filter_sizes=1,2,3,4,5
+filter_nums=2,2,2,2,2

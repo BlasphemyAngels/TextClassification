@@ -1,15 +1,20 @@
-from websearch import Segmenter
+import jieba
+from utils import load_stop_list
 
-with open("./random100", "r") as f:
+stops = load_stop_list()
+
+with open("./badcase", "r") as f:
     lines = f.readlines()
-    data = list(map(lambda line: line.rstrip("\n").split("\t")[1], lines))
+    #  data = list(map(lambda line: line.rstrip("\n").split("\t")[1], lines))
+    data = list(map(lambda line: line.rstrip("\n"), lines))
 
-seg = Segmenter()
-cut_texts = [[token.word() for token in list(seg.cut_token(text)) if not token.is_stopword()] for text in data]
-cut_texts = list(map(lambda x: " ".join(x), cut_texts))
+cut_texts = []
+for text in data:
+    cut_text = [word for word in jieba.cut(text) if False or (word not in stops)]
+    cut_texts.append(" ".join(cut_text))
 
 lines = "\n".join(cut_texts)
 
-with open("cut_random100", "w") as f:
+with open("badcase", "w") as f:
     f.write(lines)
 
